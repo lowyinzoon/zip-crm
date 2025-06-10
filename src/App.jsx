@@ -5,6 +5,7 @@ import TechnicianView from './pages/TechnicianView'
 import CustomerView from './pages/CustomerView'
 import Inventory from './pages/Inventory'
 import AdminJobHistory from './pages/AdminJobHistory'
+import AdminReport from './pages/AdminReportView'
 import ProtectedRoute from './ProtectedRoute'
 
 function App() {
@@ -48,6 +49,14 @@ function App() {
         element={
           <ProtectedRoute allowed={['admin']}>
             <AdminJobHistory />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin-report"
+        element={
+          <ProtectedRoute allowed={['admin']}>
+            <AdminReport />
           </ProtectedRoute>
         }
       />

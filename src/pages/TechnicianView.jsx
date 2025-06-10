@@ -5,9 +5,10 @@ import {
   getDocs,
   updateDoc,
   doc,
-  addDoc,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { generateServiceReportPDF } from '../utils/generateServiceReportPDF';
+import { saveAs } from 'file-saver';
 
 export default function TechnicianView() {
   const [jobs, setJobs] = useState([]);
@@ -29,14 +30,58 @@ export default function TechnicianView() {
   }, []);
 
   // Update job status in Firestore
-  const markAsDone = async (id) => {
-    const jobDoc = doc(db, 'jobs', id);
-    await updateDoc(jobDoc, { status: 'completed' });
+  const updateJobStatus = async (jobId, status) => {
+    const jobDoc = doc(db, 'jobs', jobId);
+    await updateDoc(jobDoc, { status });
     setJobs((prev) =>
       prev.map((job) =>
-        job.id === id ? { ...job, status: 'completed' } : job
+        job.id === jobId ? { ...job, status } : job
       )
     );
+  };
+
+  // Handle marking job as done
+  const handleMarkAsDone = async (job) => {
+    try {
+      // 1. Update Firestore job status to "completed"
+      await updateJobStatus(job.id, 'completed');
+
+      // 2. Generate and download PDF
+      const pdfBlob = await generateServiceReportPDF({
+        ...job,
+        reportId: job.id,
+        date: new Date().toLocaleDateString(),
+        timeIn: new Date().toLocaleTimeString(),
+        timeOut: new Date().toLocaleTimeString(),
+      });
+      saveAs(pdfBlob, `ServiceReport-${job.id}.pdf`);
+
+      // 3. Upload PDF to Firebase Storage
+      const pdfRef = ref(storage, `service_reports/${job.id}_report.pdf`);
+      await uploadBytes(pdfRef, pdfBlob);
+      const pdfUrl = await getDownloadURL(pdfRef);
+
+      // 4. Update job with PDF URL
+      const jobDoc = doc(db, 'jobs', job.id);
+      await updateDoc(jobDoc, { 
+        reportPDF: pdfUrl,
+        completedAt: new Date().toISOString()
+      });
+
+      // Update local state
+      setJobs((prev) =>
+        prev.map((j) =>
+          j.id === job.id ? { 
+            ...j, 
+            reportPDF: pdfUrl,
+            completedAt: new Date().toISOString()
+          } : j
+        )
+      );
+    } catch (error) {
+      console.error('Error marking job as done:', error);
+      alert('Error generating report. Please try again.');
+    }
   };
 
   // Upload photo + update Firestore
@@ -73,11 +118,24 @@ export default function TechnicianView() {
 
           {job.status === 'pending' && (
             <button
-              onClick={() => markAsDone(job.id)}
-              className="mt-2 bg-indigo-500 text-white text-sm px-4 py-1 rounded"
+              onClick={() => handleMarkAsDone(job)}
+              className="mt-2 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-md transition-colors duration-200 flex items-center justify-center gap-2"
             >
-              ✅ Mark as Done
+              <span>✅</span>
+              <span>Mark as Done</span>
             </button>
+          )}
+
+          {job.reportPDF && (
+            <a
+              href={job.reportPDF}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md transition-colors duration-200 flex items-center justify-center gap-2"
+            >
+              <span>📄</span>
+              <span>View Report</span>
+            </a>
           )}
 
           <div className="mt-4">
